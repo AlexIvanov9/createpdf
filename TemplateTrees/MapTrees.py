@@ -6,7 +6,7 @@ import os
 import logging
 import glob
 import re
-
+import csv
 
 class MapToPDF():
     
@@ -23,9 +23,34 @@ class MapToPDF():
             return farm_id
         else:
             raise ValueError("Could not determine farm id.")
+            
+            
+            
+            
+            
+    def get_geometry_co_csv(self,pathshp):
+        """
+        save csv with x and y coordinats near shp
+        """
+        fieldnames = ['TreeId', 'Point_X', 'Point_Y']
         
-    
-    
+        
+        field_names = [f.name for f in arcpy.ListFields(pathshp)]
+        
+        if "treeid" not in field_names:
+            return "There is no treeid field"
+            
+        name = os.path.basename(pathshp)[:-4]
+        dirpath = os.path.dirname(pathshp)
+        path = os.path.join(dirpath,name[:-4]+'_X_Y.csv')
+        with open(path, "wb") as out_file:# for 2 python need use wb to avoid empty lines
+            writer = csv.DictWriter(out_file, delimiter=';', fieldnames=fieldnames,dialect='excel')
+            curs = arcpy.da.SearchCursor(pathshp,["treeid","SHAPE@X","SHAPE@Y"])
+            writer.writeheader()
+            for row in curs:
+                writer.writerow({fieldnames[0]:row[0],fieldnames[1]:row[1],fieldnames[2]:row[2]})
+                
+            return
     
     
     def get_mxd(self,mxdname):
@@ -71,7 +96,7 @@ class MapToPDF():
 
 
             
-    def exportMap(self, shp, pathExport,mxds = True):
+    def exportMap(self, shp, pathExport,mxds = True,csv = False):
         named = {'48777': 'Lao Che Clark Blk', '48776': 'Indiana McDonald', '48775': 'Lao Che Yamhill Blk', '48774': 'Kazim East', '48773': 'Spalko', '48772': 'Belloq', '48771': 'Indiana Jefferson', '48770': 'Elsa West', '48769': 'Elsa East', '48779': 'Donovan East', '48778': 'Donovan West', '48780': 'Kazim West', '48781': 'Mutt'}
         shppath = shp[0] + '//' + shp[1] + '.shp'
         
@@ -84,10 +109,10 @@ class MapToPDF():
         df.scale = df.scale * 1.07
         fid = self.get_fid_from_filename(shp[1])
         print fid
-        treesmiss = glob.glob(os.path.join(r"D:\Google drive\Freelancers\Projects\Special Projects - Production\Tree Count\Flight 8261\tree count","*{}**{}*.shp").format(str(fid),'missing'))[0]
-        imagepath = glob.glob(os.path.join(r"D:\Google drive\Freelancers\Projects\Special Projects - Production\Tree Count\Flight 8261\registered","*{}**{}*.tif").format(str(fid),'VNIR'))[0]
+        treesmiss = glob.glob(os.path.join(pathtofligt, "tree count","*{}**{}*.shp").format(str(fid),'missing'))[0]
+        imagepath = glob.glob(os.path.join(pathtofligt,"registered","*{}**{}*.tif").format(str(fid),'VNIR'))[0]
         #lyr = arcpy.MakeRasterLayer_management(imagepath,'Background')
-        border = glob.glob(os.path.join(r"D:\Google drive\Freelancers\Projects\Special Projects - Production\Tree Count\Flight 8261\field borders","*{}*.shp").format(str(fid)))[0]
+        border = glob.glob(os.path.join(pathtofligt,"field borders","*{}*.shp").format(str(fid)))[0]
         layermiss.replaceDataSource(os.path.dirname(treesmiss),'SHAPEFILE_WORKSPACE',os.path.basename(treesmiss)[:-4])
         borders.replaceDataSource(os.path.dirname(border),'SHAPEFILE_WORKSPACE',os.path.basename(border)[:-4])
         background.replaceDataSource(os.path.dirname(imagepath),'RASTER_WORKSPACE',os.path.basename(imagepath)[:-4])
@@ -98,7 +123,10 @@ class MapToPDF():
         elemList = arcpy.mapping.ListLayoutElements(mxd, "TEXT_ELEMENT")# получение листа всех элементов лейаута
         for elem in elemList:
                 if elem.name == "NewName":
-                    elem.text = named[str(fid)]
+                    try:
+                        elem.text = named[str(fid)]
+                    except:
+                        elem.text = str(fid)
                     continue
                 elif elem.name == "Total_trees":
                     try:
@@ -120,6 +148,8 @@ class MapToPDF():
            pathmxd = os.path.join(tfolaer,shp[1] + '.mxd')
            mxd.saveACopy(pathmxd,'10.3')
         del mxd
+        if csv:
+            self.get_geometry_co_csv(shppath)
         return
 
 
@@ -154,7 +184,7 @@ class MapToPDF():
             if not os.path.exists(pathExport):
                 os.makedirs(pathExport)
         #shpfiles = glob.glob(r"D:\Google drive\Freelancers\Projects\Special Projects - Production\Farm Digitization\**\digitized\*.shp")
-        shpfiles = glob.glob(r"D:\Google drive\Freelancers\Projects\Special Projects - Production\Tree Count\Flight 8261\tree count\*.shp")
+        shpfiles = glob.glob(os.path.join(pathtofligt,"tree count\*.shp"))
         for shp in shpfiles:
             if 'missing trees' in os.path.basename(shp)[:-4]:
                 continue
@@ -172,10 +202,18 @@ class MapToPDF():
             mapbookpath = mapbookpath + "\\" + name + ".pdf"
             self.getmapbook(pathExport, mapbookpath)
 
+print ('Please insert path to the folder with flight')
+
+pathtofligt = raw_input()  
+
+print ('Please insert path to the output folder')
+
+pathoutput = raw_input()  
+
 #an example
 pdf = MapToPDF()
 listshp = []# лист имен шейп файлов которые обрабатывать
-pdf.getPdf( r'D:\Google drive\Freelancers\Projects\Special Projects - Production\Tree Count\Flight 8261',listshp, r'D:\Python\ScriptFORmap\TemplateTrees\PDFs\v2', mapbook = False)
+pdf.getPdf( pathtofligt,listshp, pathoutput , mapbook = False)
 
 
 #D:\Sasha\Goodle_drive\Freelancers\Projects\FM Vegetation boundaries\FM_updateMerge
